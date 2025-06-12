@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ID Verification</title>
+<style>
+* { box-sizing: border-box; }
+body {
+margin: 0;
+padding: 0;
+background-color: #000;
+color: #fff;
+font-family: 'Segoe UI', sans-serif;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: flex-start;
+min-height: 100vh;
+padding: 30px 20px;
+}
+h1 {
+font-size: 28px;
+text-align: center;
+margin-bottom: 10px;
+}
+p {
+font-size: 16px;
+text-align: center;
+margin-bottom: 20px;
+max-width: 600px;
+}
+select, input[type="email"] {
+padding: 10px;
+font-size: 16px;
+margin-bottom: 20px;
+border-radius: 5px;
+border: none;
+width: 100%;
+max-width: 300px;
+}
+.button-container {
+display: flex;
+flex-direction: column;
+gap: 15px;
+width: 100%;
+max-width: 300px;
+margin-bottom: 30px;
+}
+button {
+padding: 12px;
+font-size: 16px;
+background-color: #1e90ff;
+color: white;
+border: none;
+border-radius: 5px;
+cursor: pointer;
+}
+button:hover:not(:disabled) {
+background-color: #0d6efd;
+}
+button:disabled {
+background-color: #555;
+cursor: not-allowed;
+}
+#preview {
+display: none;
+flex-direction: column;
+align-items: center;
+}
+#preview img {
+max-width: 100%;
+height: auto;
+border: 2px solid #555;
+border-radius: 8px;
+margin: 15px 0;
+}
+.status {
+color: #00ff00;
+margin-bottom: 10px;
+min-height: 24px;
+text-align: center;
+}
+.footer {
+margin-top: auto;
+font-size: 14px;
+color: #888;
+text-align: center;
+padding-top: 30px;
+}
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>ID & Passport Verification</h1>
+<p>Please capture or upload both front and back images of your ID or passport.</p>
+
+<select id="docType">
+<option value="id">ID Card</option>
+<option value="passport">Passport</option>
+</select>
+
+<input type="email" id="emailInput" placeholder="Enter your email" />
+
+<div class="button-container">
+<input type="file" accept="image/*" capture="environment" id="cameraInput" class="hidden" />
+<input type="file" accept="image/*" id="fileInput" class="hidden" />
+<button onclick="startCapture()" id="captureBtn" disabled>📷 Capture Using Camera</button>
+<button onclick="startUpload()" id="uploadBtn" disabled>🗂️ Upload from Device</button>
+</div>
+
+<div id="preview">
+<h3 id="stepTitle">Preview</h3>
+<img id="previewImage" src="#" alt="Preview">
+<div style="margin-top: 10px;">
+<button onclick="confirmImage()">✔️ Confirm</button>
+<button onclick="retakeImage()">🔄 Retake</button>
+</div>
+<div class="status" id="uploadStatus"></div>
+</div>
+
+<button id="sendBtn" disabled onclick="sendToESP32()">Send</button>
+
+<div class="footer">Developed by Mohammed Khalfan ©</div>
+
+<script>
+const cameraInput = document.getElementById("cameraInput");
+const fileInput = document.getElementById("fileInput");
+const preview = document.getElementById("preview");
+const previewImage = document.getElementById("previewImage");
+const stepTitle = document.getElementById("stepTitle");
+const statusDiv = document.getElementById("uploadStatus");
+const docType = document.getElementById("docType");
+const emailInput = document.getElementById("emailInput");
+const captureBtn = document.getElementById("captureBtn");
+const uploadBtn = document.getElementById("uploadBtn");
+const sendBtn = document.getElementById("sendBtn");
+
+let method = "";
+let step = 1;
+let images = {};
+
+emailInput.addEventListener("input", () => {
+if (validateEmail(emailInput.value)) {
+captureBtn.disabled = false;
+uploadBtn.disabled = false;
+} else {
+captureBtn.disabled = true;
+uploadBtn.disabled = true;
+}
+sendBtn.disabled = true;
+statusDiv.innerText = "";
+});
+
+function validateEmail(email) {
+const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+return re.test(email.toLowerCase());
+}
+
+function startCapture() {
+method = "camera";
+step = 1;
+images = {};
+stepTitle.innerText = "Capture Front Side";
+preview.style.display = "none";
+statusDiv.innerText = "";
+cameraInput.value = "";
+cameraInput.click();
+}
+
+function startUpload() {
+method = "upload";
+step = 1;
+images = {};
+stepTitle.innerText = "Upload Front Side";
+preview.style.display = "none";
+statusDiv.innerText = "";
+fileInput.value = "";
+fileInput.click();
+}
+
+function handleFile(file) {
+if (file) {
+const reader = new FileReader();
+reader.onload = function(e) {
+previewImage.src = e.target.result;
+preview.style.display = "flex";
+};
+reader.readAsDataURL(file);
+}
+}
+
+function confirmImage() {
+const key = step === 1 ? "front" : "back";
+images[key] = previewImage.src;
+preview.style.display = "none";
+statusDiv.innerText = `✅ ${key.charAt(0).toUpperCase() + key.slice(1)} Image Uploaded`;
+
+if (step === 1) {
+step = 2;
+stepTitle.innerText = method === "camera" ? "Capture Back Side" : "Upload Back Side";
+method === "camera" ? cameraInput.click() : fileInput.click();
+} else {
+alert("✅ Both images have been successfully added!");
+if (validateEmail(emailInput.value) && images.front && images.back) {
+sendBtn.disabled = false;
+}
+}
+}
+
+function retakeImage() {
+preview.style.display = "none";
+method === "camera" ? cameraInput.click() : fileInput.click();
+}
+
+cameraInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+
+function sendToESP32() {
+if (!validateEmail(emailInput.value)) {
+alert("⚠️ Please enter a valid email before sending.");
+return;
+}
+if (!images.front || !images.back) {
+alert("⚠️ Please upload both front and back images.");
+return;
+}
+
+const data = {
+email: emailInput.value,
+type: docType.value,
+front: images.front,
+back: images.back
+};
+
+fetch("http://192.168.0.140/upload", {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify(data)
+})
+.then(res => {
+if (res.ok) alert("📤 Sent to ESP32 successfully!");
+else alert("⚠️ Failed to send to ESP32.");
+})
+.catch(err => {
+console.error(err);
+alert("❌ Error sending to ESP32.");
+});
+}
+</script>
+
+</body>
+</html>
